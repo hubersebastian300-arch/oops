@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.example.oops</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/absolute/path/to/oops!.app/Contents/MacOS/oops</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OOPS_TARGET_IP</key>
+    <string>203.0.113.10</string>
+    <key>OOPS_PROXY_ENDPOINT</key>
+    <string>127.0.0.1:7897</string>
+    <key>OOPS_PROXY_URL</key>
+    <string>http://127.0.0.1:7897</string>
+    <key>OOPS_TUN_DEVICE</key>
+    <string>utun1024</string>
+    <key>OOPS_TUN_IPV4</key>
+    <string>28.0.0.1</string>
+    <key>OOPS_RISK_CIDR</key>
+    <string>203.0.113.0/24</string>
+    <key>OOPS_ASN</key>
+    <string>0</string>
+    <key>OOPS_TIME_ZONE</key>
+    <string>America/Los_Angeles</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/oops.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/oops.launchd.err.log</string>
+</dict>
+</plist>

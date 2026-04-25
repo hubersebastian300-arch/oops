@@ -1,0 +1,7 @@
+.DS_Store
+*.log
+/tmp/
+*.app/
+com.morgan.oops.plist
+vircs-exit-guard-reference.json
+VIRCSExitGuardApp/Resources/vircs-exit-guard-reference.json
