@@ -191,8 +191,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastPathStatus: NWPath.Status?
     private var publicCheckWorkItem: DispatchWorkItem?
     private var lastLinesByName: [String: CheckLine] = [:]
-    private var networkCutActive = false
-    private var lastCutServices: [String] = []
     private var lastAlertAt = Date.distantPast
     private var lastProblemLogAt = Date.distantPast
     private var graceUntil = Date().addingTimeInterval(90)
@@ -210,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusPanel()
         appendOutput("oops! started.")
         appendOutput("Target exit: \(policy.targetIP)")
-        appendOutput("Startup grace: 90s before automatic network cut.")
+        appendOutput("Read-only mode: this app never changes network services or firewall rules.")
         appendOutput("Ultra-light cadence: local 2s, exit on startup/network/6h, full check manual.")
         setState(.check, force: true)
         runCheck(reason: "startup", mode: .publicExit, forceLog: true)
@@ -285,10 +283,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fullButton = NSButton(title: "full check", target: self, action: #selector(fullCheckNow))
         fullButton.frame = NSRect(x: panelSize.width - 284, y: panelSize.height - 46, width: 80, height: 28)
         content.addSubview(fullButton)
-
-        let restoreButton = NSButton(title: "restore network", target: self, action: #selector(restoreNetwork))
-        restoreButton.frame = NSRect(x: panelSize.width - 198, y: panelSize.height - 46, width: 130, height: 28)
-        content.addSubview(restoreButton)
 
         let hideButton = NSButton(title: "hide", target: self, action: #selector(hideInfo))
         hideButton.frame = NSRect(x: panelSize.width - 62, y: panelSize.height - 46, width: 44, height: 28)
@@ -408,15 +402,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         appendOutput("Quitting oops! by user request.")
-        if networkCutActive || !lastCutServices.isEmpty {
-            let services = lastCutServices.isEmpty ? [policy.fallbackNetworkService] : lastCutServices
-            appendOutput("Restoring network before quit: \(services.joined(separator: ", "))")
-            for service in services {
-                _ = Shell.run("/usr/sbin/networksetup",
-                              ["-setnetworkserviceenabled", service, "on"],
-                              timeout: 8)
-            }
-        }
         let text = [
             "state=quit",
             "target=\(policy.targetIP)",
@@ -424,28 +409,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ].joined(separator: "\n") + "\n"
         try? text.write(toFile: stateFile, atomically: true, encoding: .utf8)
         NSApp.terminate(nil)
-    }
-
-    @objc private func restoreNetwork() {
-        let services = lastCutServices.isEmpty ? [policy.fallbackNetworkService] : lastCutServices
-        appendOutput("Restoring network services: \(services.joined(separator: ", "))")
-        DispatchQueue.global(qos: .userInitiated).async {
-            var messages: [String] = []
-            for service in services {
-                let result = Shell.run("/usr/sbin/networksetup",
-                                       ["-setnetworkserviceenabled", service, "on"],
-                                       timeout: 8)
-                messages.append("\(service): exit=\(result.status) \(result.output)")
-            }
-            DispatchQueue.main.async {
-                self.networkCutActive = false
-                self.lastCutServices = []
-                self.graceUntil = Date().addingTimeInterval(75)
-                self.appendOutput("Restore command: \(messages.joined(separator: " | "))")
-                self.setState(.check, force: true)
-                self.runCheck(reason: "restore", mode: .publicExit, forceLog: true)
-            }
-        }
     }
 
     private func startTimers() {
@@ -858,7 +821,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if confirmedWrongExit.isEmpty && Date() < graceUntil {
                 let seconds = Int(graceUntil.timeIntervalSinceNow.rounded(.up))
                 if shouldLog {
-                    appendOutput("Hard failure inside startup grace. Network cut armed in \(max(seconds, 0))s if still failing: \(reasonText)")
+                    appendOutput("Hard failure inside startup grace. Warning stays read-only for \(max(seconds, 0))s: \(reasonText)")
                 }
                 if stateChanged || Date().timeIntervalSince(lastAlertAt) > 30 {
                     raiseAndShake()
@@ -866,7 +829,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            cutNetwork(reason: reasonText)
+            if shouldLog {
+                appendOutput("Read-only warning: \(reasonText)")
+            }
             if stateChanged || Date().timeIntervalSince(lastAlertAt) > 30 {
                 raiseAndShake()
             }
@@ -887,40 +852,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        networkCutActive = false
         hasReachedSafe = true
         setState(.safe)
-    }
-
-    private func cutNetwork(reason: String) {
-        if networkCutActive { return }
-        networkCutActive = true
-        let services = enabledNetworkServices()
-        lastCutServices = services.isEmpty ? [policy.fallbackNetworkService] : services
-        appendOutput("Cutting network services \(lastCutServices.joined(separator: ", ")): \(reason)")
-        DispatchQueue.global(qos: .userInitiated).async {
-            var messages: [String] = []
-            for service in self.lastCutServices {
-                let result = Shell.run("/usr/sbin/networksetup",
-                                       ["-setnetworkserviceenabled", service, "off"],
-                                       timeout: 8)
-                messages.append("\(service): exit=\(result.status) \(result.output)")
-            }
-            DispatchQueue.main.async {
-                self.appendOutput("Network cut command: \(messages.joined(separator: " | "))")
-                self.raiseAndShake()
-            }
-        }
-    }
-
-    private func enabledNetworkServices() -> [String] {
-        let result = Shell.run("/usr/sbin/networksetup", ["-listallnetworkservices"], timeout: 5)
-        let lines = result.output
-            .split(separator: "\n")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-        return lines
-            .dropFirst()
-            .filter { !$0.isEmpty && !$0.hasPrefix("*") }
     }
 
     private func setState(_ newState: GuardState, force: Bool = false) {
