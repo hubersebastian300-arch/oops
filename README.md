@@ -7,6 +7,12 @@
 
 It was built as a lightweight personal status light. The macOS version checks only one thing: the public IPv4 returned by a simple HTTPS endpoint.
 
+Right-click the floating text for:
+
+- `info`: target IP, current exit IP, last check, next check, check URL, and read-only mode.
+- `check now`: run one immediate exit-IP check.
+- `quit`: close the app.
+
 ## Versions
 
 - `VIRCSExitGuardApp/`: macOS source.

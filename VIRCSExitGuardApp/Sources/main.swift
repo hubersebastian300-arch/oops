@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastInfo = "starting"
     private var lastIP = ""
     private var lastCheckedAt = Date.distantPast
+    private var currentState: GuardState = .check
     private let stateFile = "/tmp/oops.guard.state"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -145,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showInfo() {
         let alert = NSAlert()
         alert.messageText = "oops!"
-        alert.informativeText = lastInfo
+        alert.informativeText = infoText()
         alert.alertStyle = .informational
         alert.runModal()
     }
@@ -189,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setState(_ state: GuardState, detail: String) {
+        currentState = state
         lastInfo = detail
         badge.setState(state)
         positionPanel()
@@ -202,9 +204,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "target=\(policy.targetIP)",
             "exit=\(lastIP.isEmpty ? "unknown" : lastIP)",
             "updated_at=\(timestamp())",
+            "next_check_at=\(nextCheckText())",
             "detail=\(detail.replacingOccurrences(of: "\n", with: "; "))"
         ].joined(separator: "\n") + "\n"
         try? text.write(toFile: stateFile, atomically: true, encoding: .utf8)
+    }
+
+    private func infoText(extra: String? = nil) -> String {
+        var lines = [
+            "state: \(currentState.text)",
+            "target: \(policy.targetIP)",
+            "exit: \(lastIP.isEmpty ? "unknown" : lastIP)",
+            "last checked: \(lastCheckedText())",
+            "next check: \(nextCheckText())",
+            "check URL: \(policy.checkURL)",
+            "interval: \(Int(policy.interval))s",
+            "mode: read-only"
+        ]
+        if let extra = extra {
+            lines.append("note: \(extra)")
+        }
+        if !lastInfo.isEmpty && lastInfo != "starting" {
+            lines.append("")
+            lines.append(lastInfo)
+        }
+        return lines.joined(separator: "\n")
     }
 
     private static func fetch(_ urlText: String) -> Result<String, Error> {
@@ -239,9 +263,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func timestamp() -> String {
+        formatDate(lastCheckedAt == .distantPast ? Date() : lastCheckedAt)
+    }
+
+    private func lastCheckedText() -> String {
+        lastCheckedAt == .distantPast ? "never" : formatDate(lastCheckedAt)
+    }
+
+    private func nextCheckText() -> String {
+        guard lastCheckedAt != .distantPast else { return "after first check" }
+        return formatDate(lastCheckedAt.addingTimeInterval(policy.interval))
+    }
+
+    private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.string(from: lastCheckedAt == .distantPast ? Date() : lastCheckedAt)
+        return formatter.string(from: date)
     }
 }
 
